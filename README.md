@@ -74,11 +74,18 @@
 
 ### Signal two — the style signal
 
-**What it measures:**
+**What it measures:** `stylometry.style_signal` averages three normalized
+measurements: sentence-length variation, repeated vocabulary (one minus the
+type-token ratio), and punctuation marks per word. Each component points in
+the same direction: higher means more AI-like.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** Generated writing may
+use more consistent sentence lengths, repeat a narrower vocabulary, and use
+less varied punctuation. These are tendencies, not reliable authorship tests.
 
-**What it can't see:**
+**What it can't see:** It cannot understand meaning or identify who wrote the
+text. Short text, deliberate punctuation or sentence edits, and changes to
+word choice can move the score without changing authorship.
 
 ### The combining rule
 
