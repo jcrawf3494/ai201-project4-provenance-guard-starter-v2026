@@ -39,7 +39,20 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
-
+1. A writer sends `text` and `creator_id` as JSON to `POST /submit`.
+2. The Flask route reads those fields and assigns the submission a `content_id`
+   so the decision can be identified later.
+3. `detector.model_signal` runs the text through the local language model and
+   returns a model score: how predictable the text is, mapped to an AI-likelihood
+   score.
+4. `stylometry.style_signal` measures the text's surface patterns, such as
+   sentence-length variation, vocabulary repetition, and punctuation, and
+   returns a style score.
+5. `scoring.combine_signals` combines the two scores into one overall score.
+6. `scoring.score_to_label` maps that score to a human, unsure, or AI guess and
+   the corresponding reader-facing message.
+7. The route records the decision and its scores in the audit log, then returns
+   the `content_id`, scores, guess, confidence, and label as JSON.
 
 ---
 

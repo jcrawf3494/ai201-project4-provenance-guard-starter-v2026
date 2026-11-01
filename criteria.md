@@ -42,63 +42,62 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+## 1. Limit false positives for human writing
 
-<!-- Your criterion. It must name a number. -->
+Across each of the three evaluation trials, no more than 1 of 10 pieces of
+human-written text will receive the high-confidence AI label.
 
-
-
-**Why this target:**
-
-
-
----
-
-## 2.
-
-<!-- Your criterion. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** A false accusation can harm a real writer, so I would
+rather leave some AI-written text uncertain than label a person's own writing
+as AI. Testing 10 examples per trial makes the limit concrete.
 
 ---
 
-## 3.
+## 2. Separate clearly human and clearly AI scores
 
-<!-- Your criterion. -->
+In each evaluation trial, the mean combined score for the clearly AI-written
+examples will be at least 0.20 higher than the mean combined score for the
+clearly human-written examples.
 
+**Why this target:** A 0.20 gap is large enough to show useful separation on
+the 0-to-1 scale, without demanding perfect detection or that every individual
+example score in the expected order.
+---
 
+## 3. Make all three labels reachable
 
-**Why this target:**
+Scores of 0.00, 0.50, and 1.00 passed to the label-mapping function will
+produce, respectively, the human, unsure, and AI labels.
 
-
+**Why this target:** A label category that no possible score can produce is
+misleading to readers and makes the label ranges incomplete. Testing the low,
+middle, and high ends checks that all three categories can be reached.
 
 ---
 
-## 4.
+## 4. Record valid appeals and change their status
 
-<!-- Your criterion. -->
+For every valid appeal referring to an existing `content_id`, the endpoint
+will return a success response, append exactly one appeal entry to the audit
+log, and record the content's status as `under_review`.
 
-
-
-**Why this target:**
-
-
+**Why this target:** A writer needs confirmation that their appeal was
+received, and a reviewer needs a record of it. Requiring both the status change
+and the log entry makes the appeal path observable rather than just a message
+to the writer.
 
 ---
 
-## 5.
+## 5. Reject missing, empty, and oversized text
 
-<!-- Your criterion. -->
+Requests with missing or whitespace-only `text` will receive HTTP 400;
+requests with more than 10,000 characters of text will receive HTTP 413.
+None of these requests will create a decision entry in the audit log.
 
-
-
-**Why this target:**
-
-
+**Why this target:** Missing or empty text cannot be meaningfully scored, and
+a fixed 10,000-character limit prevents unexpectedly large submissions from
+consuming excessive processing time. Explicit status codes and checking the
+log make each outcome verifiable.
 
 ---
 
