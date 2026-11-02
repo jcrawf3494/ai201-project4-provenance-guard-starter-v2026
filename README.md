@@ -208,14 +208,20 @@ the original decision remains in the append-only log.
 **Moment 1**
 
 - *What I asked for:*
+The one that I had the most help with AI was trying to get the curl commands to work. I tried following what was in the readme and in the instructions but the commands kept failing for me.
 - *What came back:*
+There were a few differnt commands that it sent back until finally it came back wiht the correct one. 
 - *What I changed:*
+I think overall there were like 3 or 4 differnt commands that I had to run in order for it to work. 
 
 **Moment 2**
 
 - *What I asked for:*
+I had it help create the connections between the signals and help the logic on the rules. 
 - *What came back:*
+At first it came back that the human generated was showing more AI than AI generated so I had to change some of the weights a few times 
 - *What I changed:*
+I had to iterate like 2 or 3 times before there was a result that I felt was passable. 
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 
