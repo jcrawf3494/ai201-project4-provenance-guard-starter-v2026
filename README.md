@@ -66,19 +66,27 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** `detector.model_signal` measures how predictable the
+text is to a local GPT-2 language model. It calculates perplexity (average
+next-token surprise) and maps it to a 0–1 score; higher means more predictable
+and therefore more AI-like according to this signal.
 
-**Why that might differ between human and AI writing:**
+**Why that might differ between human and AI writing:** Language models tend to
+choose likely next words, so generated text may be easier for a similar model
+to predict. Human writing can be less predictable, though many people also
+write plainly and predictably.
 
-**What it can't see:**
+**What it can't see:** Predictability does not establish authorship. The model
+cannot tell who wrote the text or whether it was AI-assisted; topic, writing
+style, language proficiency, and text length can also affect its score.
 
 ### Signal two — the style signal
 
 **What it measures:** `stylometry.style_signal` averages three normalized
 measurements: sentence-length variation, type-token ratio, and punctuation
-marks per word. For the initial human/AI example pair, low sentence variation
-and higher vocabulary variety and punctuation point toward AI-like; those
-directions are provisional and must be checked against more labeled examples.
+marks per word. Its current heuristic treats low sentence variation and, based
+on the initial example pair, higher vocabulary variety and punctuation as
+more AI-like. Those feature directions are provisional.
 
 **Why that might differ between human and AI writing:** Generated writing may
 use more consistent sentence lengths. Vocabulary variety and punctuation can
@@ -136,6 +144,12 @@ overall ranking.
 | unsure | Above 0.35 and below 0.65 | We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use. |
 | high-confidence AI | 0.65–1.00, inclusive | This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it. |
 
+Verify the mapping and configured score ranges with:
+
+```powershell
+python -c "import scoring; print([scoring.score_to_label(s)[0] for s in (0.0, 0.5, 1.0)]); print(scoring.label_ranges())"
+```
+
 **Why I worded the "unsure" one this way:**
 <!-- It's the hardest of the three. It has to admit uncertainty without
      sounding like an accusation, because the person reading it may well have
@@ -160,36 +174,28 @@ uncertain score.
      two off the response, so leaving them out costs you next unit's
      diagnostics. -->
 
-```bash
-$ curl -X POST http://127.0.0.1:5000/submit \
-  -H "Content-Type: application/json" \
-  -d '{"text": "...", "creator_id": "..."}'
+```powershell
+$submitBody = @{
+  text = "I really do not want to go to work tomorrow. I feel completely exhausted, and work has become so dull and repetitive. I would rather sit at home and paint or just do nothing all day long."
+  creator_id = "test-user"
+} | ConvertTo-Json -Compress
+$submit = Invoke-RestMethod -Uri "http://127.0.0.1:5000/submit" -Method Post -ContentType "application/json" -Body $submitBody
+$submit | ConvertTo-Json -Depth 5
 ```
 
-```json
-
-```
+Paste the actual JSON response here after running the command.
 
 **An appeal**
 
 ```powershell
 $body = @{
-  content_id = "94900b5b-d5a5-4b38-8794-bb67955e7f07"
+  content_id = $submit.content_id
   reasoning = "I wrote this myself and would like the result reviewed."
 } | ConvertTo-Json -Compress
 Invoke-RestMethod -Uri "http://127.0.0.1:5000/appeal" -Method Post -ContentType "application/json" -Body $body
 ```
 
-Expected response:
-
-```text
-{
-  "content_id": "94900b5b-d5a5-4b38-8794-bb67955e7f07",
-  "message": "Your appeal has been recorded for review.",
-  "ok": true,
-  "status": "under_review"
-}
-```
+Paste the actual appeal response here after running the command.
 
 **What the log shows afterwards**
 
@@ -197,9 +203,9 @@ Expected response:
 Invoke-RestMethod -Uri "http://127.0.0.1:5000/log?limit=3" | ConvertTo-Json -Depth 5
 ```
 
-After running these commands, paste the actual response and the matching
-`event: "appeal"` log entry here. The appeal appends an `under_review` event;
-the original decision remains in the append-only log.
+Paste the actual log response here. It should include the submission decision
+and its later appeal event with `status: "under_review"`. The append-only log
+preserves the original decision.
 
 ---
 

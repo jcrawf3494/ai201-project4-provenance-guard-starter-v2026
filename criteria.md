@@ -44,24 +44,29 @@ Two things worth knowing before you pick numbers:
 ---
 ## 1. Limit false positives for human writing
 
-Across each of the three evaluation trials, no more than 1 of 10 pieces of
-human-written text will receive the high-confidence AI label.
+Across each of the three evaluation trials, no more than 1 of 10 windows from
+the known human-authored Darwin passage in `scenarios.py` will receive the
+high-confidence AI label.
 
 **Why this target:** A false accusation can harm a real writer, so I would
 rather leave some AI-written text uncertain than label a person's own writing
-as AI. Testing 10 examples per trial makes the limit concrete.
+as AI. The test uses a known human-authored source because it is available for
+repeatable evaluation; its overlapping windows are correlated, so I will not
+treat the result as a general false-positive rate.
 
 ---
 
 ## 2. Separate clearly human and clearly AI scores
 
-In each evaluation trial, the mean combined score for the clearly AI-written
-examples will be at least 0.20 higher than the mean combined score for the
-clearly human-written examples.
+In each evaluation trial, the mean `/submit` `confidence` across the five
+AI-generated sample windows in `scenarios.py` will be at least 0.20 higher
+than the mean `confidence` across the five human-authored sample windows.
+`confidence` is the combined score on the 0-to-1 scale.
 
 **Why this target:** A 0.20 gap is large enough to show useful separation on
-the 0-to-1 scale, without demanding perfect detection or that every individual
-example score in the expected order.
+the 0-to-1 scale without demanding perfect detection. The two example groups
+are fixed in `scenarios.py` and their returned `confidence` values appear in
+the `run_eval.py` report.
 ---
 
 ## 3. Make all three labels reachable
@@ -71,7 +76,9 @@ produce, respectively, the human, unsure, and AI labels.
 
 **Why this target:** A label category that no possible score can produce is
 misleading to readers and makes the label ranges incomplete. Testing the low,
-middle, and high ends checks that all three categories can be reached.
+middle, and high ends checks that all three categories can be reached. Run
+`python -c "import scoring; print([scoring.score_to_label(s)[0] for s in (0.0, 0.5, 1.0)])"`
+and verify the output is `['human', 'unsure', 'ai']`.
 
 ---
 
@@ -90,14 +97,15 @@ to the writer.
 
 ## 5. Reject missing, empty, and oversized text
 
-Requests with missing or whitespace-only `text` will receive HTTP 400;
-requests with more than 10,000 characters of text will receive HTTP 413.
-None of these requests will create a decision entry in the audit log.
+In each `run_eval.py` trial, missing, empty, and whitespace-only `text` will
+receive HTTP 400; exactly 10,000 characters will be accepted with HTTP 200;
+and 10,001 characters will receive HTTP 413. Rejected requests will create a
+rejection log entry and no decision entry.
 
 **Why this target:** Missing or empty text cannot be meaningfully scored, and
 a fixed 10,000-character limit prevents unexpectedly large submissions from
-consuming excessive processing time. Explicit status codes and checking the
-log make each outcome verifiable.
+consuming excessive processing time. The bad-input scenario sends the exact
+boundary cases, and `run_eval.py` records the status code for each one.
 
 ---
 

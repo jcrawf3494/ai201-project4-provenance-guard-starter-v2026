@@ -18,8 +18,8 @@ doesn't, it's the service itself.
 Routes:
 
     POST /ping        the worked example. Already works. Don't edit it
-    POST /submit      ← YOU BUILD THIS (Milestone 3, 4, 5)
-    POST /appeal      ← YOU BUILD THIS (Milestone 5)
+    POST /submit      score and log a submission
+    POST /appeal      record an appeal for a submission
     GET  /log         the audit log. Already works
     GET  /health      is the service up, and is the model loaded
 """
@@ -226,6 +226,21 @@ def submit():
             "error": "invalid_creator_id",
             "message": "creator_id must be a non-empty string.",
         }), 400
+    if len(text) > config.MAX_SUBMISSION_CHARACTERS:
+        audit.log_rejection(
+            creator_id=creator_id,
+            reason="text_too_long",
+            text_length=len(text),
+            max_characters=config.MAX_SUBMISSION_CHARACTERS,
+        )
+        return jsonify({
+            "error": "text_too_long",
+            "message": (
+                f"text must be no more than "
+                f"{config.MAX_SUBMISSION_CHARACTERS} characters."
+            ),
+            "max_characters": config.MAX_SUBMISSION_CHARACTERS,
+        }), 413
 
     content_id = str(uuid.uuid4())
     try:

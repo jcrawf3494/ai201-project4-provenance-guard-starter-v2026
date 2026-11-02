@@ -68,7 +68,7 @@ sent it data, it sent something back.
 `/ping` still answers: if it does, the problem is in your handler; if it
 doesn't, it's the service itself, and that's a help-channel question.
 
-Then try the route you're going to build:
+Then test the submission route:
 
 ```bash
 curl -X POST http://127.0.0.1:5000/submit \
@@ -76,8 +76,10 @@ curl -X POST http://127.0.0.1:5000/submit \
   -d '{"text": "some writing", "creator_id": "me"}'
 ```
 
-It returns a `501` saying it isn't built yet. **That's the correct starting
-position.**
+It should return a JSON decision with a `content_id`, both signal scores,
+`confidence`, `guess`, and `label`. If the detector model is not available,
+the route returns `503`; run `python detector.py` once and retry. The route
+rejects empty text with `400` and text over 10,000 characters with `413`.
 
 ---
 
@@ -88,8 +90,8 @@ position.**
 | `POST /ping` | **works** | The example. Don't edit it |
 | `GET /health` | **works** | Is the service up, is the model loaded |
 | `GET /log` | **works** | The audit log, as JSON |
-| `POST /submit` | **you build it** | Milestones 3, 4, 5 |
-| `POST /appeal` | **you build it** | Milestone 5 |
+| `POST /submit` | **implemented** | Scores and logs a text submission |
+| `POST /appeal` | **implemented** | Records an appeal for an existing `content_id` |
 
 ---
 
