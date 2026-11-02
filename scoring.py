@@ -17,30 +17,50 @@ you claim, so that line should read `scoring.py::combine_signals`.
 import config
 
 
-def combine_signals(model_score: float, style_score: float) -> float:
+def combine_signals(
+    model_score: float,
+    style_score: float,
+    phrase_score: float | None = None,
+) -> float:
     """
-    Return the weighted average of the two 0–1 signals.
+    Return the weighted average of the signals, all on the 0–1 scale.
 
-    Both inputs point the same way: higher means more likely AI. Your output
-    should too.
+    Every input points the same way: higher means more likely AI. The output
+    does too.
 
     Args:
         model_score: from `detector.model_signal` — how predictable the text is.
         style_score: from `stylometry.style_signal` — the shape of the text.
+        phrase_score: from `lexical.phrase_signal` — stock-phrase density. This
+            is the STRETCH third signal; pass None to score on the two required
+            signals alone.
 
     Returns:
         A float from 0.0 (confidently human) to 1.0 (confidently AI).
 
-    The configured weights are 0.65 for the model signal and 0.35 for the
-    style signal. When signals disagree, the weighted average stays between
-    them; scores of 0.9 and 0.1 produce 0.62 (unsure).
+    The configured weights are 0.55 (model), 0.30 (style), and 0.15 (phrase),
+    which sum to 1.0. When `phrase_score` is None the two weights are
+    renormalized over themselves, which reproduces the original model-heavy
+    two-signal rule (≈0.65 / 0.35). A weighted average always lands between its
+    inputs, so disagreeing signals pull toward the unsure band.
     """
-    if not 0.0 <= model_score <= 1.0 or not 0.0 <= style_score <= 1.0:
+    scores = [model_score, style_score]
+    if phrase_score is not None:
+        scores.append(phrase_score)
+    if any(not 0.0 <= s <= 1.0 for s in scores):
         raise ValueError("Signal scores must be between 0.0 and 1.0.")
+
+    if phrase_score is None:
+        total = config.WEIGHT_MODEL_SIGNAL + config.WEIGHT_STYLE_SIGNAL
+        return (
+            config.WEIGHT_MODEL_SIGNAL * model_score
+            + config.WEIGHT_STYLE_SIGNAL * style_score
+        ) / total
 
     return (
         config.WEIGHT_MODEL_SIGNAL * model_score
         + config.WEIGHT_STYLE_SIGNAL * style_score
+        + config.WEIGHT_PHRASE_SIGNAL * phrase_score
     )
 
 

@@ -51,12 +51,19 @@ MAX_SUBMISSION_CHARACTERS = 10_000
 # ─── Scoring (Milestone 4) ───────────────────────────────────────────────────
 # How much each signal counts toward the combined score.
 #
-# The current combining rule is a weighted average. The model signal has more
-# influence because the initial style examples did not rank as expected.
-# Treat these as trial weights and recalibrate with a broader labeled set.
+# The combining rule is a weighted average. The model signal has the most
+# influence; the two surface signals (style, phrase) split the rest. Treat these
+# as trial weights and recalibrate with a broader labeled set.
+#
+# STRETCH: the phrase signal (lexical.py) was added after unit 7's two signals.
+# Adding a third weight means the split had to change: the old two-signal rule
+# was model 0.65 / style 0.35, and the running service now uses the three below,
+# which sum to 1.0. When combine_signals is called with only two signals it
+# renormalizes over the two, which keeps the original model-heavy ratio.
 
-WEIGHT_MODEL_SIGNAL = 0.65
-WEIGHT_STYLE_SIGNAL = 0.35
+WEIGHT_MODEL_SIGNAL = 0.55
+WEIGHT_STYLE_SIGNAL = 0.30
+WEIGHT_PHRASE_SIGNAL = 0.15
 
 
 # ─── Thresholds (Milestone 5) ────────────────────────────────────────────────
@@ -106,3 +113,12 @@ RATE_LIMIT_STORAGE = "memory://"
 LOG_DIR = ROOT / "logs"
 AUDIT_LOG = LOG_DIR / "audit.jsonl"
 RESULTS_DIR = ROOT / "results"
+
+
+# ─── Verified-human path (STRETCH) ───────────────────────────────────────────
+# A writer earns a credential by posting this exact phrase to POST /verify. It's
+# an attestation, not a password — the point is a deliberate, on-the-record step,
+# not secrecy. Credentials are stored here, tied to creator_id.
+
+ATTESTATION_PHRASE = "I attest this is my own original writing."
+CREDENTIALS_FILE = RESULTS_DIR / "credentials.json"

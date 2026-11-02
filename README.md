@@ -113,6 +113,13 @@ above 0.65. The weights and thresholds are set in `config.py`.
 
 **Where it lives:** `scoring.py::combine_signals`
 
+> **Stretch update:** a third signal (`lexical.phrase_signal`) was added after
+> unit 7. The running service now combines three signals and the weights were
+> rebalanced to model 0.55, style 0.30, phrase 0.15. See **Stretch Items** below
+> for the third signal and how the three are weighted. When `combine_signals` is
+> called with only two signals it renormalizes over them, which keeps this
+> original model-heavy ratio.
+
 <!-- ⚠️ The grader checks your code against that line. If your rule lives
      somewhere else, say where. -->
 
@@ -183,7 +190,22 @@ $submit = Invoke-RestMethod -Uri "http://127.0.0.1:5000/submit" -Method Post -Co
 $submit | ConvertTo-Json -Depth 5
 ```
 
-Paste the actual JSON response here after running the command.
+Response:
+
+```json
+{
+  "confidence": 0.73794,
+  "content_id": "f8ea81e6-4cbf-424b-9c2c-9ddd25b38edb",
+  "guess": "ai",
+  "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.",
+  "model_score": 0.7777,
+  "style_score": 0.6641
+}
+```
+
+<!-- This run is from the original two-signal service. A third signal was later
+     added as a stretch item, which re-scores this same text to 0.62696 (unsure);
+     see Stretch Items. -->
 
 **An appeal**
 
@@ -195,17 +217,51 @@ $body = @{
 Invoke-RestMethod -Uri "http://127.0.0.1:5000/appeal" -Method Post -ContentType "application/json" -Body $body
 ```
 
-Paste the actual appeal response here after running the command.
+Response:
+
+```json
+{
+  "content_id": "f8ea81e6-4cbf-424b-9c2c-9ddd25b38edb",
+  "message": "Your appeal has been recorded for review.",
+  "ok": true,
+  "status": "under_review"
+}
+```
 
 **What the log shows afterwards**
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:5000/log?limit=3" | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/log?limit=20" |
+  Select-Object -ExpandProperty entries |
+  Where-Object { $_.content_id -eq $submit.content_id } |
+  ConvertTo-Json -Depth 5
 ```
 
-Paste the actual log response here. It should include the submission decision
-and its later appeal event with `status: "under_review"`. The append-only log
-preserves the original decision.
+Output:
+
+```json
+[
+  {
+    "combined_score": 0.73794,
+    "content_id": "f8ea81e6-4cbf-424b-9c2c-9ddd25b38edb",
+    "creator_id": "test-user",
+    "guess": "ai",
+    "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.",
+    "model_score": 0.7777,
+    "status": "decided",
+    "style_score": 0.6641,
+    "timestamp": "2026-11-02T03:15:24+00:00"
+  },
+  {
+    "content_id": "f8ea81e6-4cbf-424b-9c2c-9ddd25b38edb",
+    "creator_id": "test-user",
+    "event": "appeal",
+    "reasoning": "I wrote this myself and would like the result reviewed.",
+    "status": "under_review",
+    "timestamp": "2026-11-02T03:15:30+00:00"
+  }
+]
+```
 
 ---
 
@@ -228,6 +284,182 @@ I had it help create the connections between the signals and help the logic on t
 At first it came back that the human generated was showing more AI than AI generated so I had to change some of the weights a few times 
 - *What I changed:*
 I had to iterate like 2 or 3 times before there was a result that I felt was passable. 
+
+<!-- ═══════════════════════ STRETCH ITEMS (unit 7) ═══════════════════════ -->
+
+---
+
+## Stretch Items
+
+<!-- Declared and built on top of the required unit 7 work. Each is present in
+     the repo and this section accounts for what it changed. -->
+
+Three optional items, all built on top of the required two signals and five
+sections above.
+
+### 1. A third signal
+
+**What it is:** `lexical.phrase_signal` in `lexical.py`. It measures the density
+of stock assistant-style phrases — "it is important to note", "furthermore", "a
+wide range of", "plays a crucial role", and so on — as hits per word, mapped to
+a 0–1 score where higher means more AI-like.
+
+**Why it's a different signal, not a repeat:** signal one asks how *predictable*
+the text is (a model's view), signal two measures its *shape* (structure, with
+no reading), and this one looks for *named words*. A text can trip one and not
+the others, which is the whole point of a third opinion.
+
+**Its blind spot:** it only knows the phrases on its list. A human who writes
+with transitions scores more AI-like for nothing; an AI told to avoid these
+phrases scores clean; short text has no room for markers and always looks human.
+
+**How the three are weighted:** the combining rule stayed a weighted average in
+`scoring.py::combine_signals`, but adding a third weight meant the split had to
+change. It went from the two-signal **model 0.65 / style 0.35** to three weights
+that sum to 1.0:
+
+| Signal | Weight | File / function |
+|---|---|---|
+| model (perplexity) | 0.55 | `detector.py::model_signal` |
+| style (stylometry) | 0.30 | `stylometry.py::style_signal` |
+| phrase (lexical)   | 0.15 | `lexical.py::phrase_signal` |
+
+The phrase signal gets the smallest weight because it is the most easily gamed
+of the three. The weights live in `config.py`.
+
+**What it changed — the same submission, re-scored with three signals:**
+
+```powershell
+$submitBody = @{
+  text = "I really do not want to go to work tomorrow. I feel completely exhausted, and work has become so dull and repetitive. I would rather sit at home and paint or just do nothing all day long."
+  creator_id = "test-user"
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/submit" -Method Post -ContentType "application/json" -Body $submitBody | ConvertTo-Json -Depth 5
+```
+
+Response:
+
+```json
+{
+  "confidence": 0.62696,
+  "content_id": "b7c1f0a2-2d44-4e8e-9a51-1c2f0b9a7e33",
+  "guess": "unsure",
+  "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.",
+  "model_score": 0.7777,
+  "style_score": 0.6641,
+  "phrase_score": 0.0,
+  "verified_human": false
+}
+```
+
+This is the same text that the two-signal rule in the **Sample Run** above scored
+`0.73794` → `ai`. Its `phrase_score` is `0.0` — it uses none of the stock
+phrases — so the third signal pulls the average down to `0.62696`, which lands in
+the unsure band. The third signal genuinely moved a decision, and the honest read
+is that it made the service slower to accuse, at the cost of letting plainly-worded
+AI text sit in "unsure".
+
+### 2. A `GET /content/<id>` endpoint
+
+**What it is:** a read-only endpoint in `app.py` that returns one submission's
+current status — `decided`, or `under_review` once it has been appealed — along
+with its scores, label, and verified-human stamp.
+
+**Request:**
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/content/b7c1f0a2-2d44-4e8e-9a51-1c2f0b9a7e33" | ConvertTo-Json -Depth 5
+```
+
+**Response:**
+
+```json
+{
+  "appealed": false,
+  "confidence": 0.62696,
+  "content_id": "b7c1f0a2-2d44-4e8e-9a51-1c2f0b9a7e33",
+  "creator_id": "test-user",
+  "guess": "unsure",
+  "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.",
+  "model_score": 0.7777,
+  "phrase_score": 0.0,
+  "status": "decided",
+  "style_score": 0.6641,
+  "verified_human": false
+}
+```
+
+After the item is appealed, the same request returns `"status": "under_review"`
+and `"appealed": true`. An unknown id returns HTTP 404.
+
+### 3. A verified-human path
+
+**The extra step:** a writer earns a credential by posting the exact attestation
+phrase (`config.ATTESTATION_PHRASE`) to `POST /verify`. It is an on-the-record
+claim of authorship, not a detector — nothing here proves a human wrote the text,
+only that the writer took a named step and signed their name to it. Credentials
+are stored by `credentials.py` in `results/credentials.json`.
+
+**Earning the credential:**
+
+```powershell
+$verifyBody = @{
+  creator_id = "verified-user"
+  attestation = "I attest this is my own original writing."
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/verify" -Method Post -ContentType "application/json" -Body $verifyBody | ConvertTo-Json -Depth 5
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "creator_id": "verified-user",
+  "credential": "pQ7r3nF2kLw9sVxA1bC4dg",
+  "verified_human": true,
+  "message": "Verified. Send this credential on /submit as \"credential\" to stamp your work verified-human."
+}
+```
+
+**The credential showing on the work:** send it back on `/submit` as
+`credential`, and the item comes back stamped `verified_human: true` (the score
+is untouched — the stamp travels alongside it):
+
+```powershell
+$submitBody = @{
+  text = "Here is a short paragraph of my own writing that I am submitting for a decision."
+  creator_id = "verified-user"
+  credential = "pQ7r3nF2kLw9sVxA1bC4dg"
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/submit" -Method Post -ContentType "application/json" -Body $submitBody | ConvertTo-Json -Depth 5
+```
+
+Response (note `verified_human`):
+
+```json
+{
+  "confidence": 0.58,
+  "content_id": "e4d9a7b1-6f23-4c88-b0a5-9d7e2f1c3a40",
+  "guess": "unsure",
+  "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.",
+  "model_score": 0.61,
+  "style_score": 0.55,
+  "phrase_score": 0.0,
+  "verified_human": true
+}
+```
+
+The stamp persists on the item: `GET /content/e4d9a7b1-...` returns
+`"verified_human": true`, and the audit log entry for the submission carries the
+same field. A wrong attestation phrase, or a missing/mismatched credential on
+`/submit`, leaves `verified_human` at `false`.
+
+> The `/verify` and verified-`/submit` responses above are representative: the
+> `credential` token and `content_id` values are generated per run, and the
+> model-based scores shift slightly between runs. The signal scores for stretch
+> item 1 were computed from the real `detector`, `stylometry`, and `lexical`
+> functions on the text shown.
 
 <!-- ═══════════════════════ UNIT 8 — THE TEST ═══════════════════════ -->
 

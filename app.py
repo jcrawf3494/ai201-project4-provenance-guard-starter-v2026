@@ -17,11 +17,13 @@ doesn't, it's the service itself.
 
 Routes:
 
-    POST /ping        the worked example. Already works. Don't edit it
-    POST /submit      score and log a submission
-    POST /appeal      record an appeal for a submission
-    GET  /log         the audit log. Already works
-    GET  /health      is the service up, and is the model loaded
+    POST /ping          the worked example. Already works. Don't edit it
+    POST /submit        score and log a submission
+    POST /appeal        record an appeal for a submission
+    POST /verify        earn a verified-human credential (STRETCH)
+    GET  /content/<id>  one item's current status (STRETCH)
+    GET  /log           the audit log. Already works
+    GET  /health        is the service up, and is the model loaded
 """
 
 import uuid
@@ -30,7 +32,9 @@ from flask import Flask, jsonify, request
 
 import audit
 import config
+import credentials
 import detector
+import lexical
 import scoring
 import stylometry
 
@@ -258,8 +262,17 @@ def submit():
         }), 503
 
     style_score = stylometry.style_signal(text)
-    confidence = scoring.combine_signals(model_score, style_score)
+    phrase_score = lexical.phrase_signal(text)
+    confidence = scoring.combine_signals(model_score, style_score, phrase_score)
     guess, label = scoring.score_to_label(confidence)
+
+    # STRETCH: an optional credential stamps the item as verified-human. It never
+    # changes the score — it travels alongside it, onto the response and the log.
+    credential = payload.get("credential")
+    verified_human = bool(
+        isinstance(credential, str)
+        and credentials.verify(creator_id, credential)
+    )
 
     audit.log_decision(
         content_id=content_id,
@@ -269,6 +282,8 @@ def submit():
         style_score=style_score,
         combined_score=confidence,
         label=label,
+        phrase_score=phrase_score,
+        verified_human=verified_human,
     )
 
     return jsonify({
@@ -278,6 +293,8 @@ def submit():
         "label": label,
         "model_score": model_score,
         "style_score": style_score,
+        "phrase_score": phrase_score,
+        "verified_human": verified_human,
     })
 
 
@@ -348,6 +365,95 @@ def appeal():
         "content_id": content_id,
         "status": "under_review",
         "message": "Your appeal has been recorded for review.",
+    })
+
+
+# ── Verified-human path — STRETCH ─────────────────────────────────────────────
+
+@app.post("/verify")
+def verify():
+    """
+    Earn a verified-human credential by attesting to authorship.
+
+    Expects JSON:
+        {"creator_id": "...", "attestation": "<the exact phrase>"}
+
+    The extra step is typing `config.ATTESTATION_PHRASE` exactly. On success the
+    writer gets back a `credential` token to send on future `/submit` calls,
+    where it stamps the item `verified_human: true`.
+    """
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({
+            "error": "invalid_request",
+            "message": "Request body must be a JSON object.",
+        }), 400
+
+    creator_id = payload.get("creator_id")
+    attestation = payload.get("attestation")
+    if not isinstance(creator_id, str) or not creator_id.strip():
+        return jsonify({
+            "error": "invalid_creator_id",
+            "message": "creator_id must be a non-empty string.",
+        }), 400
+    if not isinstance(attestation, str) or attestation.strip() != config.ATTESTATION_PHRASE:
+        return jsonify({
+            "error": "attestation_mismatch",
+            "message": "attestation must match the exact attestation phrase.",
+            "required_phrase": config.ATTESTATION_PHRASE,
+        }), 400
+
+    token = credentials.issue(creator_id.strip())
+    audit.log_verification(creator_id=creator_id.strip())
+    return jsonify({
+        "ok": True,
+        "creator_id": creator_id.strip(),
+        "credential": token,
+        "verified_human": True,
+        "message": (
+            "Verified. Send this credential on /submit as \"credential\" to "
+            "stamp your work verified-human."
+        ),
+    })
+
+
+# ── One item's status — STRETCH ───────────────────────────────────────────────
+
+@app.get("/content/<content_id>")
+def content_status(content_id):
+    """
+    Return one submission's current status.
+
+        curl http://127.0.0.1:5000/content/<id>
+
+    Reads every log entry for the id, takes the decision for its scores and
+    label, and reports the current status — `under_review` if it was appealed,
+    otherwise `decided` — plus whether the item was stamped verified-human.
+    """
+    entries = audit.entries_for(content_id)
+    if not entries:
+        return jsonify({
+            "error": "content_not_found",
+            "message": "No submission was found for that content_id.",
+        }), 404
+
+    decisions = [e for e in entries if e.get("event") != "appeal" and e.get("guess") is not None]
+    decision = decisions[-1] if decisions else {}
+    appealed = any(e.get("event") == "appeal" for e in entries)
+    status = "under_review" if appealed else decision.get("status", "decided")
+
+    return jsonify({
+        "content_id": content_id,
+        "status": status,
+        "appealed": appealed,
+        "creator_id": decision.get("creator_id"),
+        "guess": decision.get("guess"),
+        "confidence": decision.get("combined_score"),
+        "label": decision.get("label"),
+        "model_score": decision.get("model_score"),
+        "style_score": decision.get("style_score"),
+        "phrase_score": decision.get("phrase_score"),
+        "verified_human": bool(decision.get("verified_human", False)),
     })
 
 

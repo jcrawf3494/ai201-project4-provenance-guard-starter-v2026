@@ -112,6 +112,21 @@ def log_rejection(creator_id: str, reason: str, **extra) -> dict:
     })
 
 
+def log_verification(creator_id: str) -> dict:
+    """
+    Record that a creator earned a verified-human credential. ← STRETCH
+
+    Append-only like everything else, so the moment a writer attested to their
+    authorship stays on the record beside their submissions.
+    """
+    return _append({
+        "timestamp": _now(),
+        "creator_id": creator_id,
+        "event": "verification",
+        "status": "verified",
+    })
+
+
 def _append(entry: dict) -> dict:
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     line = json.dumps(entry, ensure_ascii=False)
