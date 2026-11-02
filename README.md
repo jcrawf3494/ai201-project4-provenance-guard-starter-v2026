@@ -75,13 +75,15 @@
 ### Signal two — the style signal
 
 **What it measures:** `stylometry.style_signal` averages three normalized
-measurements: sentence-length variation, repeated vocabulary (one minus the
-type-token ratio), and punctuation marks per word. Each component points in
-the same direction: higher means more AI-like.
+measurements: sentence-length variation, type-token ratio, and punctuation
+marks per word. For the initial human/AI example pair, low sentence variation
+and higher vocabulary variety and punctuation point toward AI-like; those
+directions are provisional and must be checked against more labeled examples.
 
 **Why that might differ between human and AI writing:** Generated writing may
-use more consistent sentence lengths, repeat a narrower vocabulary, and use
-less varied punctuation. These are tendencies, not reliable authorship tests.
+use more consistent sentence lengths. Vocabulary variety and punctuation can
+vary with topic, length, prompt, and editing, so their direction is not
+universal. These are tendencies, not reliable authorship tests.
 
 **What it can't see:** It cannot understand meaning or identify who wrote the
 text. Short text, deliberate punctuation or sentence edits, and changes to
@@ -92,16 +94,30 @@ word choice can move the score without changing authorship.
 <!-- Write the rule in words, then give the numbers. What happens when the two
      signals disagree? -->
 
-**The rule:**
+**The rule:** Take the weighted average of the model and style scores. Both
+signals point in the same direction, so a higher result means more AI-like.
+When they disagree, the result stays between the two scores. The model signal
+has more weight, but a strong disagreement can still land in the unsure band.
 
-**The numbers:**
+**The numbers:** Model weight 0.65 and style weight 0.35. The resulting score
+maps to human at or below 0.35, unsure above 0.35 and below 0.65, and AI at or
+above 0.65. The weights and thresholds are set in `config.py`.
 
 **Where it lives:** `scoring.py::combine_signals`
 
 <!-- ⚠️ The grader checks your code against that line. If your rule lives
      somewhere else, say where. -->
 
-**A case where my two signals split, and what my rule does with it:**
+**A case where my two signals split, and what my rule does with it:** If the
+model signal is 0.90 and the style signal is 0.10, the combined score is
+`(0.65 × 0.90) + (0.35 × 0.10) = 0.62`, so the result is unsure.
+
+These are initial trial weights, not calibrated values: the two style examples
+initially ranked the human passage slightly more AI-like than the AI passage.
+I changed the style feature directions based on that pair and reduced its
+weight, but this is a small, overfit calibration. I need more labeled examples
+and model scores for those same texts before concluding these changes improve
+overall ranking.
 
 
 
@@ -116,15 +132,18 @@ word choice can move the score without changing authorship.
 
 | Label | Score range | The exact text a reader sees |
 |---|---|---|
-| high-confidence human |  |  |
-| unsure |  |  |
-| high-confidence AI |  |  |
+| high-confidence human | 0.00–0.35, inclusive | We think this was probably written by a person. |
+| unsure | Above 0.35 and below 0.65 | We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use. |
+| high-confidence AI | 0.65–1.00, inclusive | This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it. |
 
 **Why I worded the "unsure" one this way:**
 <!-- It's the hardest of the three. It has to admit uncertainty without
      sounding like an accusation, because the person reading it may well have
      written every word themselves. -->
 
+It admits that the system cannot tell reliably and explicitly says the result
+is not proof of AI use, so a writer is not treated as guilty based on an
+uncertain score.
 
 
 ---
@@ -153,25 +172,34 @@ $ curl -X POST http://127.0.0.1:5000/submit \
 
 **An appeal**
 
-```bash
-$ curl -X POST http://127.0.0.1:5000/appeal \
-  -H "Content-Type: application/json" \
-  -d '{"content_id": "...", "reasoning": "..."}'
+```powershell
+$body = @{
+  content_id = "94900b5b-d5a5-4b38-8794-bb67955e7f07"
+  reasoning = "I wrote this myself and would like the result reviewed."
+} | ConvertTo-Json -Compress
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/appeal" -Method Post -ContentType "application/json" -Body $body
 ```
 
-```json
+Expected response:
 
+```text
+{
+  "content_id": "94900b5b-d5a5-4b38-8794-bb67955e7f07",
+  "message": "Your appeal has been recorded for review.",
+  "ok": true,
+  "status": "under_review"
+}
 ```
 
 **What the log shows afterwards**
 
-```bash
-$ curl "http://127.0.0.1:5000/log?limit=3"
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/log?limit=3" | ConvertTo-Json -Depth 5
 ```
 
-```json
-
-```
+After running these commands, paste the actual response and the matching
+`event: "appeal"` log entry here. The appeal appends an `under_review` event;
+the original decision remains in the append-only log.
 
 ---
 

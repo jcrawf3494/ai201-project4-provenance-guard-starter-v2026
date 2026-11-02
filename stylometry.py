@@ -12,10 +12,10 @@ normalized AI-like directions.
     type_token_ratio         how much of the vocabulary repeats?
     punctuation_density      how much punctuation, and how varied?
 
-Why these might differ between human and AI writing: generated prose tends
-toward even, mid-length sentences and a narrower band of vocabulary, because
-that's what "most likely next word" produces on average. Human writing is
-lumpier — a three-word sentence next to a forty-word one.
+These are only surface features. Generated prose may have more consistent
+sentence lengths, but vocabulary variety and punctuation depend on the prompt,
+topic, length, and editing. Their direction must be checked against labeled
+examples rather than assumed.
 
 ⚠️ **The blind spot, which you have to name in Milestone 1.**
 
@@ -102,14 +102,16 @@ def style_signal(text: str) -> float:
     """
     The style signal as a 0–1 score. Higher means more likely AI.
 
-    Each measure is converted to an AI-like score and the three are averaged:
-    low sentence-length variation, low vocabulary variety, and low punctuation
-    density each contribute a higher AI-like score. Sentence variation is
-    bounded with cv / (1 + cv); punctuation density is bounded with
-    rate / (rate + 0.2). The type-token ratio is already between zero and one.
+    Each measure is converted to an AI-like score and the three are averaged.
+    Low sentence-length variation contributes a higher score. For the initial
+    calibration pair, higher type-token ratio and punctuation density moved
+    toward the known AI example, so those directions are used provisionally.
+    Sentence variation is bounded with 1 / (1 + cv), and punctuation density
+    with rate / (rate + 0.2). The type-token ratio is already between zero and
+    one.
 
-    This is a simple heuristic, not evidence of authorship. Short texts and
-    deliberate edits can move these surface measurements.
+    This is a simple heuristic, not evidence of authorship. The directions
+    should be recalibrated against a larger, varied set of labeled texts.
     """
     tokens = words(text)
     if not tokens:
@@ -118,10 +120,10 @@ def style_signal(text: str) -> float:
     spread = sentence_length_spread(text)
     spread_ai_score = 1.0 / (1.0 + spread)
 
-    vocabulary_ai_score = 1.0 - type_token_ratio(text)
+    vocabulary_ai_score = type_token_ratio(text)
 
     punctuation_rate = punctuation_density(text)
-    punctuation_ai_score = 1.0 / (1.0 + punctuation_rate / 0.2)
+    punctuation_ai_score = punctuation_rate / (punctuation_rate + 0.2)
 
     return round(
         (spread_ai_score + vocabulary_ai_score + punctuation_ai_score) / 3.0,
