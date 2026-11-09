@@ -54,6 +54,16 @@ as AI. The test uses a known human-authored source because it is available for
 repeatable evaluation; its overlapping windows are correlated, so I will not
 treat the result as a general false-positive rate.
 
+> **Revised in unit 8:** The input is now ten short, independent human-authored
+> writing samples (`scenarios.OWN_WRITING`) instead of the Darwin windows. Same
+> target: across each of three trials, at most 1 of the 10 receives the
+> high-confidence AI label.
+>
+> **Why revised:** the Darwin windows overlap, so a single hard window showed up
+> several times and the "10" wasn't 10 independent chances to misfire. Ten
+> separate everyday passages are closer to what a real writing-site user submits
+> and make the false-positive count mean what it says. The target did not move.
+
 ---
 
 ## 2. Separate clearly human and clearly AI scores

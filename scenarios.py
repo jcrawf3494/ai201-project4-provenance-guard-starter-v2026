@@ -55,14 +55,63 @@ AI_SOURCE = (
 
 HUMAN_EXAMPLES = _windows(HUMAN_SOURCE, count=10, width=40)
 AI_EXAMPLES = _windows(AI_SOURCE, count=5, width=40)
+
+# Ten short first-person human-style passages for the false-positive criterion.
+# Everyday writing — varied sentence length, specific detail, the odd aside —
+# the kind of thing a real writing-site user submits.
+OWN_WRITING = [
+    "I finally got around to fixing the back fence this weekend. Took way longer "
+    "than it should have because I kept running out to the hardware store for "
+    "one more bracket. By Sunday night my hands were wrecked but the gate "
+    "actually closes now, which it hasn't done since we moved in.",
+
+    "Honestly the movie was fine? Not great. The first hour dragged and I almost "
+    "fell asleep, but the ending pulled it together enough that I didn't regret "
+    "going. My sister loved it, so maybe it's just me.",
+
+    "We tried the new ramen place on 4th. The broth was rich, almost too salty "
+    "for me, but the noodles had a good chew and the egg was perfect. I'd go "
+    "back, probably on a cold day when I actually want something that heavy.",
+
+    "I've been trying to run three times a week and it is not going well. Monday "
+    "I managed two miles. Wednesday it rained so I skipped it and told myself I'd "
+    "double up Friday, which, of course, I did not. Next week.",
+
+    "My grandmother used to keep hard candy in a blue tin on the counter, and "
+    "every time I smell butterscotch I'm eight years old again in her kitchen "
+    "waiting for the kettle. Funny how a smell does that and a photograph "
+    "doesn't.",
+
+    "The meeting could have been an email. We spent forty minutes on a decision "
+    "that three people had already made in the hallway beforehand. I did get a "
+    "free coffee out of it, so there's that.",
+
+    "I planted tomatoes too early this year and the frost got half of them. The "
+    "survivors are doing okay, a little leggy, leaning toward the window like "
+    "they're trying to escape. I'll stake them this weekend if I remember.",
+
+    "Writing has never come easy to me. I stare at the blank page, type a "
+    "sentence, delete it, type it again slightly different. Eventually something "
+    "sticks and I can build off it, but those first few minutes are miserable "
+    "every single time.",
+
+    "The dog figured out how to open the pantry door. We came home to kibble "
+    "everywhere and one very guilty-looking retriever who would not make eye "
+    "contact. We've since added a latch. He is already studying the latch.",
+
+    "I don't have a strong opinion on the new logo. It's blue now instead of "
+    "green. People online are furious about it, which feels like a lot of energy "
+    "to spend on a logo, but then again I spent ten minutes reading the comments, "
+    "so who am I to judge.",
+]
 MAX_LENGTH_TEXT = "word " * 1999 + "word!"
 OVER_MAX_LENGTH_TEXT = "word " * 1999 + "word!!"
 
 SCENARIOS = [
     {
-        "name": "known human-authored passage windows",
+        "name": "human-authored writing samples",
         "criterion": 1,
-        "texts": HUMAN_EXAMPLES,
+        "texts": OWN_WRITING,
     },
     {
         "name": "human examples for score spread",
