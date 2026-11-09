@@ -103,12 +103,12 @@ def style_signal(text: str) -> float:
     The style signal as a 0–1 score. Higher means more likely AI.
 
     Each measure is converted to an AI-like score and the three are averaged.
-    Low sentence-length variation contributes a higher score. For the initial
-    calibration pair, higher type-token ratio and punctuation density moved
-    toward the known AI example, so those directions are used provisionally.
-    Sentence variation is bounded with 1 / (1 + cv), and punctuation density
-    with rate / (rate + 0.2). The type-token ratio is already between zero and
-    one.
+    Low sentence-length variation contributes a higher score. Higher punctuation
+    density moves toward the AI example. The vocabulary direction was recalibrated
+    in unit 8: a higher type-token ratio (richer vocabulary) now LOWERS the
+    AI-like score, since lexical variety is more typical of human writing — so
+    the term is `1 - type_token_ratio`. Sentence variation is bounded with
+    1 / (1 + cv), and punctuation density with rate / (rate + 0.2).
 
     This is a simple heuristic, not evidence of authorship. The directions
     should be recalibrated against a larger, varied set of labeled texts.
@@ -120,7 +120,13 @@ def style_signal(text: str) -> float:
     spread = sentence_length_spread(text)
     spread_ai_score = 1.0 / (1.0 + spread)
 
-    vocabulary_ai_score = type_token_ratio(text)
+    # UNIT 8 improvement: the vocabulary direction was inverted. Rich lexical
+    # variety (a high type-token ratio) is a hallmark of human writing, so a
+    # HIGHER ratio now lowers the AI-like score instead of raising it. The
+    # before-run diagnosis found this term sat high for every human sample and
+    # kept the whole style signal from ever scoring low. Was:
+    #     vocabulary_ai_score = type_token_ratio(text)
+    vocabulary_ai_score = 1.0 - type_token_ratio(text)
 
     punctuation_rate = punctuation_density(text)
     punctuation_ai_score = punctuation_rate / (punctuation_rate + 0.2)

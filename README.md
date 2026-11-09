@@ -687,11 +687,11 @@ evidence the test ran, not a skipped step.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Limit false positives | ≤ 1 of 10 human samples labelled `ai` | 0 / 10 | 0 / 10 | 0 / 10 | ✅ PASS |
-| 2. Separate human vs AI scores | AI mean − human mean ≥ 0.20 | gap **0.11** | gap **0.11** | gap **0.11** | ❌ MISS |
-| 3. All three labels reachable | `score_to_label(0.0, 0.5, 1.0)` = human, unsure, ai | ✅ | ✅ | ✅ | ✅ PASS |
-| 4. Record valid appeals | success + 1 appeal entry + `under_review` | ✅ | ✅ | ✅ | ✅ PASS¹ |
-| 5. Reject bad input | 400 / 400 / 400 · 200 @10k · 413 @10k+1 | ✅ | ✅ | ✅ | ✅ PASS |
+| 1. Limit false positives | ≤ 1 of 10 human samples labelled `ai`, every trial | 0 / 10 | 0 / 10 | 0 / 10 | ✅ MET |
+| 2. Separate human vs AI scores | AI mean − human mean ≥ 0.20, every trial | gap **0.11** | gap **0.11** | gap **0.11** | ❌ MISSED |
+| 3. All three labels reachable | `score_to_label(0.0, 0.5, 1.0)` = human, unsure, ai | ✅ | ✅ | ✅ | ✅ MET |
+| 4. Record valid appeals | success + 1 appeal entry + `under_review` | ✅ | ✅ | ✅ | ✅ MET¹ |
+| 5. Reject bad input | 400 / 400 / 400 · 200 @10k · 413 @10k+1 | ✅ | ✅ | ✅ | ✅ MET |
 
 ¹ Criterion 4 is not exercised by `run_eval.py` (it only calls `/submit`). It is
 verified in the **Sample Run** above and in the audit log: the appeal returns
@@ -711,7 +711,7 @@ driven by `run_eval` (it only calls `/submit`), so its output is the appeal
 record from `audit.py::log_appeal` in `logs/audit.jsonl`, also shown in the
 **Sample Run** above.
 
-**Criterion 1 — my ten writing samples (0 of 10 labelled `ai` → PASS):**
+**Criterion 1 — my ten writing samples (0 of 10 labelled `ai`, every trial → MET):**
 
 ```json
 [
@@ -728,7 +728,7 @@ record from `audit.py::log_appeal` in `logs/audit.jsonl`, also shown in the
 ]
 ```
 
-**Criterion 2 — human group (mean 0.482) then AI group (mean 0.592), gap 0.110 vs target 0.20 → MISS:**
+**Criterion 2 — human group (mean 0.482) then AI group (mean 0.592), gap 0.110 vs target 0.20 → MISSED:**
 
 ```json
 // human examples
@@ -749,7 +749,7 @@ record from `audit.py::log_appeal` in `logs/audit.jsonl`, also shown in the
 ]
 ```
 
-**Criterion 3 — label coverage, one input per band → all three labels reached → PASS:**
+**Criterion 3 — label coverage, one input per band → all three labels reached → MET:**
 
 ```json
 [
@@ -764,7 +764,7 @@ record from `audit.py::log_appeal` in `logs/audit.jsonl`, also shown in the
 > `python -c "import scoring; print([scoring.score_to_label(s)[0] for s in (0.0, 0.5, 1.0)])"`
 > → `['human', 'unsure', 'ai']`. That (not the eval texts) is what Criterion 3 targets.
 
-**Criterion 4 — a valid appeal moves the item to `under_review` and is logged (from `logs/audit.jsonl`) → PASS:**
+**Criterion 4 — a valid appeal moves the item to `under_review` and is logged (from `logs/audit.jsonl`) → MET:**
 
 ```json
 [
@@ -773,7 +773,7 @@ record from `audit.py::log_appeal` in `logs/audit.jsonl`, also shown in the
 ]
 ```
 
-**Criterion 5 — bad input and length boundary (all three trials identical) → PASS:**
+**Criterion 5 — bad input and length boundary (all three trials identical) → MET:**
 
 ```json
 [
@@ -804,7 +804,7 @@ record from `audit.py::log_appeal` in `logs/audit.jsonl`, also shown in the
 There is one missed criterion (2) and two broken attacks (FP04, FP06). They are
 the same problem seen from two sides.
 
-**Criterion 2 — MISS. Stage: signal two (stylometry) and the combining rule.**
+**Criterion 2 — MISSED. Stage: signal two (stylometry) and the combining rule.**
 The human mean (0.482) and AI mean (0.592) are only 0.11 apart; the target is
 0.20. The mechanism is that the **style signal does not discriminate**. Across
 every text in the eval — Darwin, the AI passage, my own samples — `style_score`
@@ -843,20 +843,109 @@ improvement attempted below.
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** One change, in `stylometry.py::style_signal` — I inverted the
+vocabulary term. It was `vocabulary_ai_score = type_token_ratio(text)` (a richer
+vocabulary raised the AI-like score); it is now
+`vocabulary_ai_score = 1.0 - type_token_ratio(text)` (a richer vocabulary lowers
+it). Nothing else moved — same three measures, same weights (0.55 / 0.30 / 0.15),
+same thresholds (0.35 / 0.65).
 
-**Which diagnosis pointed at it:**
+**Which diagnosis pointed at it:** The Criterion 2 miss and the FP04/FP06 breaks
+shared one root cause — the style signal never scored low for genuine human
+writing, so real text was pinned in `unsure` or pushed into `ai`, and the
+human/AI means stayed compressed 0.11 apart. Two of the three style sub-scores
+sit high for almost any prose; the vocabulary term was the one whose *direction*
+was also wrong. High lexical variety is more typical of human writing than of
+machine writing, yet the signal was counting it as AI-like. Flipping it is the
+most direct way to let clean human prose score low, which is what the diagnosis
+said the fix had to do. I changed only this one term so the before/after
+difference is attributable to it and nothing else.
 
 ### Attack Run — After
 
 <!-- Same format. `run_attacks.py --label after` -->
 
+Produced by `run_attacks.py --label after` →
+`results/attack_run_2026-11-09_0200_after.md`, the same 56 attacks, one change
+away from the before-run. Eight attacks changed verdict; the other 48 were
+identical.
 
+| Attack | Before | After | Effect |
+|---|---|---|---|
+| EV01 (evasion) | unsure 0.377 | **human 0.303** | ⬇ broke — AI-leaning text now cleared as human |
+| EV05 (evasion) | unsure 0.357 | **human 0.304** | ⬇ broke — now cleared as human |
+| EV08 (evasion) | unsure 0.363 | **human 0.263** | ⬇ broke — now cleared as human |
+| EV07 (evasion) | ai 0.681 | unsure 0.627 | no longer caught |
+| EV09 (evasion) | ai 0.651 | unsure 0.581 | no longer caught |
+| FP06 (false_positive) | **ai 0.659** | unsure 0.613 | ⬆ **fixed — false accusation removed** |
+| FP08 (false_positive) | unsure 0.412 | human 0.312 | ⬆ fixed — real human cleared |
+| MF05 (malformed) | ai 0.749 | unsure 0.649 | junk no longer called AI |
 
-**Did it help, and how do I know:**
+Held / broke totals: **before 54 held / 2 broke → after 52 held / 4 broke.**
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+| Family | Broke before | Broke after |
+|---|---|---|
+| evasion | 0 | **3** (EV01, EV05, EV08) |
+| false_positive | **2** | 1 (FP04 only) |
+| prompt_injection | 0 | 0 |
+| malformed | 0 | 0 |
+| flood_same_creator | 0 | 0 |
+
+**Ten audit entries from the after-run** (from `logs/audit.jsonl`; watch the
+`style_score` column — it fell on every one, which is the change working):
+
+```json
+{"timestamp": "2026-11-09T07:00:29+00:00", "content_id": "cd20d933-b3ff-4caa-b0c4-026dc581620e", "creator_id": "attacker_EV01", "guess": "human", "model_score": 0.1635, "style_score": 0.4613, "combined_score": 0.302565, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.495, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:31+00:00", "content_id": "0d3162b9-4ec8-494a-9591-e795ad81bfb7", "creator_id": "attacker_EV05", "guess": "human", "model_score": 0.3212, "style_score": 0.4236, "combined_score": 0.30374, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:32+00:00", "content_id": "47bb852a-a76c-45fb-85f7-a592c9673ea3", "creator_id": "attacker_EV08", "guess": "human", "model_score": 0.2452, "style_score": 0.4265, "combined_score": 0.26281, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:32+00:00", "content_id": "3cd49655-334f-49d1-9d16-f8392540b163", "creator_id": "attacker_EV07", "guess": "unsure", "model_score": 0.5862, "style_score": 0.5861, "combined_score": 0.62685, "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.", "status": "decided", "phrase_score": 0.8574, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:35+00:00", "content_id": "eef40b74-3103-4e81-9402-74c1a41dc8f3", "creator_id": "attacker_FP06", "guess": "unsure", "model_score": 0.8814, "style_score": 0.4258, "combined_score": 0.61251, "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:34+00:00", "content_id": "4e2ea7ba-e10c-4b0d-9b7c-2a38a46f4f81", "creator_id": "attacker_FP04", "guess": "ai", "model_score": 0.8329, "style_score": 0.4404, "combined_score": 0.67282, "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.", "status": "decided", "phrase_score": 0.5507, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:35+00:00", "content_id": "c910900f-670e-41aa-a8c9-db5e35d99848", "creator_id": "attacker_FP08", "guess": "human", "model_score": 0.3223, "style_score": 0.45, "combined_score": 0.312265, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:39+00:00", "content_id": "38f4076d-6070-4e6f-8d8a-da2030f36ec4", "creator_id": "attacker_MF05", "guess": "unsure", "model_score": 0.9976, "style_score": 0.3333, "combined_score": 0.64867, "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:41+00:00", "content_id": "5f99f481-e645-44cd-b14f-dec293a44862", "creator_id": "attacker_flood", "guess": "human", "model_score": 0.0287, "style_score": 0.4524, "combined_score": 0.151505, "label": "We think this was probably written by a person.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T07:00:37+00:00", "creator_id": "attacker_MF01", "event": "rejected", "status": "rejected", "reason": "invalid_text"}
+```
+
+**The five criteria, before vs after** (`run_eval.py --label after` →
+`results/run_2026-11-09_0201_after.md`; three identical trials each):
+
+| Criterion | Target | Before | After | Verdict |
+|---|---|---|---|---|
+| 1. Limit false positives | ≤ 1 of 10 `ai` | 0/10 (all `unsure`) | 0/10 (7 `unsure`, 3 `human`) | MET → **MET** |
+| 2. Separate human vs AI | gap ≥ 0.20 | gap 0.110 | gap **0.091** | MISSED → **MISSED** |
+| 3. All labels reachable | 0/.5/1 → h/u/ai | MET | MET | MET → **MET** |
+| 4. Record valid appeals | status + log | MET | MET | MET → **MET** |
+| 5. Reject bad input | 400/400/400·200·413 | MET | MET | MET → **MET** |
+
+Criterion 2 detail: human mean 0.482 → **0.421**, AI mean 0.592 → **0.512**. Both
+groups fell; the gap narrowed from 0.110 to 0.091.
+
+**Did it help, and how do I know:** Partly — and not where I aimed it.
+
+- **It helped the false-positive side**, which the diagnosis cared about most.
+  FP06's wrong `ai` accusation is gone (now `unsure`); FP08 and three of my ten
+  Criterion-1 samples are now correctly cleared as `human`; `style_score` fell
+  by roughly 0.2 on human text (the reload check went 0.6625 → 0.3776).
+  False-positive breaks dropped from **2 to 1**.
+- **It did not fix the criterion I changed it for.** Criterion 2's gap went
+  0.110 → **0.091** — slightly *worse*, still nowhere near 0.20. Inverting the
+  vocabulary term lowered human and AI scores *together* (AI mean fell almost as
+  much as human mean), because the AI passage's vocabulary variety is about the
+  same as the human text's. Dropping the floor shifted both groups toward
+  `human`; it did not pull them apart. The real problem is that neither signal
+  separates these two sources — a level change to one signal can't create a
+  separation that was never there.
+- **It introduced a new cost.** Three evasion inputs (EV01, EV05, EV08) that were
+  safely `unsure` are now confidently cleared as `human`, and the `ai` label is
+  now rarely reached by real text (the AI source in label-coverage dropped from
+  `ai` to `unsure`). Total attack breaks rose **2 → 4**.
+
+Honest read: one change, one real win (fewer false accusations), the targeted
+miss unmoved, and a widened evasion hole. By this project's own cost rule — a
+wrong accusation costs a writer more than a missed detection costs the site —
+trading FP06 for three missed evasions points the right way, but Criterion 2 is
+still missed and I would not call this a clean success.
 
 
 
@@ -864,15 +953,35 @@ improvement attempted below.
 
 ## What's Still Broken
 
-<!-- For each attack still getting through and each criterion still missed:
-     what you'd do, and why you stopped. -->
+- **Criterion 2 (score spread) — still missed, gap 0.091.** The two signals do
+  not separate the human and AI sources; they overlap in both perplexity and
+  vocabulary, so no level change to one signal opens the gap. What I'd do next is
+  stop tuning signal levels and either recalibrate the *model* signal (it is the
+  only one with any separation) or add a genuinely discriminating feature, then
+  re-measure the gap. I stopped here because the milestone is one change, and
+  stacking a second would hide which one moved the number.
+- **FP04 — still accused (`ai`, 0.673).** Its `model_score` is 0.833, and the
+  style change can't reach it; a formal, rubric-shaped human essay looks
+  low-perplexity to signal one. Only a model-signal recalibration or a higher
+  `AI_THRESHOLD` fixes this, and the threshold move is the next thing I'd try.
+- **Evasion now leaks to `human` (EV01, EV05, EV08).** This is the direct cost of
+  the fix: the same floor-lowering that cleared real writers also cleared three
+  AI-leaning evasion inputs. A narrower change — only down-weighting vocabulary
+  rather than fully inverting it — might keep the false-positive gain with less
+  of this leak, and that is where I'd tune next.
+- **The `ai` label is now hard to reach for real text.** After the change, the
+  AI source scores `unsure`, not `ai`. The label is still reachable by score
+  (Criterion 3 holds on the mapping function) but real submissions rarely get
+  there, which weakens the service as a detector even as it gets safer for
+  writers.
 
-
-
-**The trade I'd make if this ran for real:**
-
-<!-- Two sentences. Fewer wrong accusations means more AI text getting through.
-     Say which way you'd go and WHO PAYS FOR IT. -->
+**The trade I'd make if this ran for real:** I would go toward fewer accusations
+— keep this change, and likely widen the unsure band further — because on a
+writing site a wrongly accused author pays far more than the site pays for
+letting some AI text through. Who pays for that choice: the site and its readers,
+who get a weaker, more often `unsure` AI signal and more evasions slipping past;
+who it protects: real writers, who are the ones a false `ai` label actually
+harms.
 
 
 
