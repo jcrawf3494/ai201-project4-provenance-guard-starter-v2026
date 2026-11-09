@@ -285,6 +285,15 @@ At first it came back that the human generated was showing more AI than AI gener
 - *What I changed:*
 I had to iterate like 2 or 3 times before there was a result that I felt was passable. 
 
+**Moment 3 (unit 8)**
+
+- *What I asked for:*
+I used AI to help run the attack set against my service and interpret the outcomes.
+- *What came back:*
+It helped me work through which attacks held and which broke, and what the results meant across the families.
+- *What I changed:*
+I used that to mark the verdicts and write up the run.
+
 <!-- ═══════════════════════ STRETCH ITEMS (unit 7) ═══════════════════════ -->
 
 ---
@@ -467,17 +476,23 @@ same field. A wrong attestation phrase, or a missing/mismatched credential on
 
 ## Rate Limiting
 
-**My limits:** __15_ per minute, _225_ per day
+**My limits:** **15** per minute, **225** per day
 
-**Why those numbers and not others:**
-<!-- Think about two people: a real writer submitting their own work a few
-     times an hour, and a script sending a thousand variations to map your
-     thresholds. Your numbers have to be liveable for the first and hostile to
-     the second. -->
+**Why those numbers and not others:** A real writer submitting their own work
+posts a handful of times an hour — well under 15 in any single minute, and
+nowhere near 225 in a day. A script mapping my thresholds sends hundreds of
+variations in a burst and trips 15/minute almost immediately. I set the daily cap
+at 225 (≈ 15 × 15) so a genuinely heavy but human day of editing and resubmitting
+still fits, while a steady automated drip that stays under the per-minute limit
+still can't run all day. The two limits cover the two shapes of abuse: 15/minute
+stops a burst, 225/day stops a slow grind.
 
-**What a caller counts as:** <!-- per address, or per creator_id? They fail
-differently — one script can look like a thousand callers, and one household
-can look like one. -->
+**What a caller counts as:** per `creator_id`, not per IP address
+(`app.py::rate_limit_key`), falling back to the address only when no usable
+creator_id is present. That choice and its trade-off — it catches one identity
+abusing the service from several addresses, but is evaded by rotating creator_ids,
+which per-address limiting would have caught — is written up under **Unit 8
+Stretch Items → Per-creator rate limiting**.
 
 **The run of status codes when I pushed past it:**
 
@@ -513,9 +528,10 @@ The first one is slow while the model loads.
 200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
 ============================================================
 
-```
-
-```
+The first 15 submissions from `flood_tester` return `200`; the 16th onward return
+`429`, which is the per-minute limit (15) doing its job. Each rejection is also
+written to the audit log as an `event: rejected`, `reason: rate_limited` entry —
+one of those appears in the ten audit entries below.
 
 ---
 
@@ -982,6 +998,83 @@ letting some AI text through. Who pays for that choice: the site and its readers
 who get a weaker, more often `unsure` AI signal and more evasions slipping past;
 who it protects: real writers, who are the ones a false `ai` label actually
 harms.
+
+---
+
+## Unit 8 Stretch Items
+
+Two optional items built on top of the required Unit 8 work.
+
+### Per-creator rate limiting (+1)
+
+Rate limiting is keyed to the **creator**, not the caller's address.
+`app.py::rate_limit_key` counts each request against its `creator_id`, and falls
+back to the IP address only when the body has no usable creator_id (missing,
+blank, or not a string). The limits are 15 / minute and 225 / day (`config.py`).
+
+**What it catches that per-address missed:** abuse tied to one identity even when
+it arrives from several addresses — one account hammering the service from a
+laptop and a phone counts as one creator. The `flood_same_creator` family (12
+submissions under `attacker_flood`) accumulates against that single key, and the
+Milestone-1 flood of 20 under `flood_tester` is what trips the limit and produces
+the 429s.
+
+**What it costs:** it is trivially evaded by rotating the creator_id. Every row in
+`attacks.csv` submits under its own `attacker_<id>`, so the whole attack set looks
+like fifty-odd different callers and never trips the limit — **per-address**
+limiting would have caught that, since it all came from one machine. The gain on
+the other side is that a shared address (a household, a classroom, an office
+behind one NAT) is not collectively punished the way per-address limiting would
+punish it. The trade, in one line: per-creator accepts "one script can look like
+a thousand callers" in exchange for "one household does not look like one
+attacker."
+
+### A second measured improvement (+2): raise the AI threshold
+
+**The change (one, from the diagnosis):** *What's Still Broken* named a higher
+`AI_THRESHOLD` as the next thing to try for FP04 — the one false accusation the
+stylometry fix couldn't reach, because its `model_score` is 0.833. So the second
+change raises `AI_THRESHOLD` from 0.65 to 0.70 in `config.py`; nothing else moved.
+Runs: `run_attacks.py --label after2` → `results/attack_run_2026-11-09_0215_after2.md`
+and `run_eval.py --label after2` → `results/run_2026-11-09_0215_after2.md`.
+
+**The five criteria across all three states** (three identical trials each, same
+table format as the run log):
+
+| Criterion | Target | Before | After 1 (style fix) | After 2 (threshold) |
+|---|---|---|---|---|
+| 1. Limit false positives | ≤ 1 / 10 `ai` | 0/10 · MET | 0/10 · MET | 0/10 · MET |
+| 2. Separate human vs AI | gap ≥ 0.20 | 0.110 · MISSED | 0.091 · MISSED | 0.091 · MISSED |
+| 3. All labels reachable | 0/.5/1 → h/u/ai | MET | MET | MET |
+| 4. Record valid appeals | status + log | MET | MET | MET |
+| 5. Reject bad input | 400/400/400·200·413 | MET | MET | MET |
+
+**Attack outcomes across the three states:**
+
+| | Before | After 1 | After 2 |
+|---|---|---|---|
+| false_positive breaks (human → `ai`) | 2 (FP04, FP06) | 1 (FP04) | **0** |
+| evasion breaks (AI → `human`) | 0 | 3 | 3 |
+| inputs labelled `ai` in the 56-attack set | 7 | 3 | **0** |
+
+**Did it help?** For its one narrow purpose, yes — and honestly it went too far.
+FP04 moved from `ai` (0.673) to `unsure`, so the service now makes **zero** false
+accusations across the entire attack set. But it made the detector worse at the
+job it exists for. Raising the threshold does nothing for Criterion 2 (thresholds
+don't change the confidence means, so the gap stays 0.091, still missed), and it
+emptied the `ai` label: EV10 and MF06 — genuinely machine / degenerate text —
+dropped to `unsure` alongside FP04, so **not one input in the 56-attack set is
+labelled `ai` any more**. The service is now safe for writers and nearly useless
+as a detector. Reported as the rubric asks: a change that made things worse on
+balance. If I kept only one change it would be the stylometry fix, which is a real
+recalibration; this threshold move buys zero false accusations at the price of
+zero detection, and in practice I'd pull it back toward 0.67 — enough to clear
+FP04 without erasing the band entirely.
+
+**What I shipped:** because this change made things worse on balance, I reverted
+`AI_THRESHOLD` to 0.65 — the service runs with the stylometry fix (after 1) and
+not this threshold. The after2 runs stay in `results/` as the evidence that the
+experiment was made and measured.
 
 
 

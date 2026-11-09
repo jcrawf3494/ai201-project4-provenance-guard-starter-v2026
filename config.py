@@ -80,6 +80,10 @@ WEIGHT_PHRASE_SIGNAL = 0.15
 # that decide who pays for it.
 
 HUMAN_THRESHOLD = 0.35
+# UNIT 8 second measured improvement (reverted): raising this from 0.65 to 0.70
+# cleared the last false accusation (FP04) but emptied the `ai` label entirely —
+# not one attack in the set scored `ai`. See README "Unit 8 Stretch Items". The
+# experiment is logged in results/*_after2.md; the shipped value stays 0.65.
 AI_THRESHOLD = 0.65
 
 # ⚠️ One thing that catches people out in Milestone 5. A weighted average can
