@@ -1002,7 +1002,7 @@ harms.
 ---
 
 ## Unit 8 Stretch Items
-
+STRETCH FEATURES 
 Two optional items built on top of the required Unit 8 work.
 
 ### Per-creator rate limiting (+1)
@@ -1030,7 +1030,7 @@ a thousand callers" in exchange for "one household does not look like one
 attacker."
 
 ### A second measured improvement (+2): raise the AI threshold
-
+STRETCH FEATURE
 **The change (one, from the diagnosis):** *What's Still Broken* named a higher
 `AI_THRESHOLD` as the next thing to try for FP04 — the one false accusation the
 stylometry fix couldn't reach, because its `model_score` is 0.833. So the second
