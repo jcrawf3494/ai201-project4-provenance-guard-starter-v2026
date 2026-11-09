@@ -680,19 +680,109 @@ little, but this accuses a person.
 
 <!-- Your five criteria across three trials. `run_eval.py --label before`. -->
 
+Three trials each, produced by `run_eval.py::main` against `app.py::submit`
+(scoring `scoring.py::combine_signals`), file `results/run_2026-11-09_0137_before.md`.
+Nothing in either signal is random, so the three trials are identical — that is
+evidence the test ran, not a skipped step.
+
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |
+| 1. Limit false positives | ≤ 1 of 10 human samples labelled `ai` | 0 / 10 | 0 / 10 | 0 / 10 | ✅ PASS |
+| 2. Separate human vs AI scores | AI mean − human mean ≥ 0.20 | gap **0.11** | gap **0.11** | gap **0.11** | ❌ MISS |
+| 3. All three labels reachable | `score_to_label(0.0, 0.5, 1.0)` = human, unsure, ai | ✅ | ✅ | ✅ | ✅ PASS |
+| 4. Record valid appeals | success + 1 appeal entry + `under_review` | ✅ | ✅ | ✅ | ✅ PASS¹ |
+| 5. Reject bad input | 400 / 400 / 400 · 200 @10k · 413 @10k+1 | ✅ | ✅ | ✅ | ✅ PASS |
+
+¹ Criterion 4 is not exercised by `run_eval.py` (it only calls `/submit`). It is
+verified in the **Sample Run** above and in the audit log: the appeal returns
+success, appends one `event: appeal` entry, and moves the item to `under_review`.
+
+**Criterion 2, the numbers behind the miss:** human mean confidence
+`0.482`, AI mean confidence `0.592`, gap `0.110` — against a `0.20` target.
+Both groups sit inside the unsure band; they are not 0.20 apart.
 
 **Real output from one trial**, pasted as text, naming the file and function
 that produced it:
 
-```json
+Real output for each of the five criteria, Trial 1. Criteria 1, 2, 3 and 5 are
+from `run_eval.py::main` → `results/run_2026-11-09_0137_before.md`; all three
+trials are byte-identical, so Trial 1 stands for all three. Criterion 4 is not
+driven by `run_eval` (it only calls `/submit`), so its output is the appeal
+record from `audit.py::log_appeal` in `logs/audit.jsonl`, also shown in the
+**Sample Run** above.
 
+**Criterion 1 — my ten writing samples (0 of 10 labelled `ai` → PASS):**
+
+```json
+[
+  {"status": 200, "guess": "unsure", "confidence": 0.46451, "model_score": 0.4832, "style_score": 0.6625, "sent": "I finally got around to fixing the back fence this weekend. Took way l"},
+  {"status": 200, "guess": "unsure", "confidence": 0.53570, "model_score": 0.6218, "style_score": 0.6457, "sent": "Honestly the movie was fine? Not great. The first hour dragged and I a"},
+  {"status": 200, "guess": "unsure", "confidence": 0.56180, "model_score": 0.6579, "style_score": 0.6665, "sent": "We tried the new ramen place on 4th. The broth was rich, almost too sa"},
+  {"status": 200, "guess": "unsure", "confidence": 0.52521, "model_score": 0.6085, "style_score": 0.6351, "sent": "I've been trying to run three times a week and it is not going well. M"},
+  {"status": 200, "guess": "unsure", "confidence": 0.38739, "model_score": 0.3762, "style_score": 0.6016, "sent": "My grandmother used to keep hard candy in a blue tin on the counter, a"},
+  {"status": 200, "guess": "unsure", "confidence": 0.47655, "model_score": 0.4969, "style_score": 0.6775, "sent": "The meeting could have been an email. We spent forty minutes on a deci"},
+  {"status": 200, "guess": "unsure", "confidence": 0.38469, "model_score": 0.3205, "style_score": 0.6947, "sent": "I planted tomatoes too early this year and the frost got half of them."},
+  {"status": 200, "guess": "unsure", "confidence": 0.48404, "model_score": 0.5072, "style_score": 0.6836, "sent": "Writing has never come easy to me. I stare at the blank page, type a s"},
+  {"status": 200, "guess": "unsure", "confidence": 0.38314, "model_score": 0.3412, "style_score": 0.6516, "sent": "The dog figured out how to open the pantry door. We came home to kibbl"},
+  {"status": 200, "guess": "unsure", "confidence": 0.56988, "model_score": 0.7110, "style_score": 0.5961, "sent": "I don't have a strong opinion on the new logo. It's blue now instead o"}
+]
+```
+
+**Criterion 2 — human group (mean 0.482) then AI group (mean 0.592), gap 0.110 vs target 0.20 → MISS:**
+
+```json
+// human examples
+[
+  {"status": 200, "guess": "unsure", "confidence": 0.47184, "model_score": 0.5448, "style_score": 0.574,  "sent": "When on board H.M.S. 'Beagle,' as naturalist, I was much struck with c"},
+  {"status": 200, "guess": "unsure", "confidence": 0.47874, "model_score": 0.5328, "style_score": 0.619,  "sent": "distribution of the inhabitants of South America, and in the geologica"},
+  {"status": 200, "guess": "unsure", "confidence": 0.49002, "model_score": 0.5928, "style_score": 0.5466, "sent": "the past inhabitants of that continent. These facts seemed to me to th"},
+  {"status": 200, "guess": "unsure", "confidence": 0.50218, "model_score": 0.5242, "style_score": 0.7129, "sent": "the origin of species—that mystery of mysteries, as it has been called"},
+  {"status": 200, "guess": "unsure", "confidence": 0.46579, "model_score": 0.5333, "style_score": 0.5749, "sent": "greatest philosophers. On my return home, it occurred to me, in 1837, "}
+]
+// AI examples
+[
+  {"status": 200, "guess": "unsure", "confidence": 0.56305, "model_score": 0.6809, "style_score": 0.6285, "sent": "Scientific inquiry represents one of the most valuable and transformat"},
+  {"status": 200, "guess": "unsure", "confidence": 0.52624, "model_score": 0.6011, "style_score": 0.6521, "sent": "deeper understanding of the complex processes that shape biological di"},
+  {"status": 200, "guess": "unsure", "confidence": 0.62126, "model_score": 0.5753, "style_score": 0.6783, "sent": "communicated to others. In this way, thoughtful research establishes a"},
+  {"status": 200, "guess": "ai",     "confidence": 0.66005, "model_score": 0.6528, "style_score": 0.6655, "sent": "encourages curiosity, supports critical thinking, and promotes informe"},
+  {"status": 200, "guess": "unsure", "confidence": 0.59026, "model_score": 0.7336, "style_score": 0.6226, "sent": "their work. Ultimately, the pursuit of knowledge is both an individual"}
+]
+```
+
+**Criterion 3 — label coverage, one input per band → all three labels reached → PASS:**
+
+```json
+[
+  {"status": 200, "guess": "unsure", "confidence": 0.545825, "model_score": 0.6857, "style_score": 0.5623, "sent": "When on board H.M.S. 'Beagle,' as naturalist, I was much struck with c"},
+  {"status": 200, "guess": "ai",     "confidence": 0.685600, "model_score": 0.7642, "style_score": 0.6404, "sent": "Scientific inquiry represents one of the most valuable and transformat"},
+  {"status": 200, "guess": "unsure", "confidence": 0.635325, "model_score": 0.7143, "style_score": 0.8082, "sent": "The meeting may have been useful, but I'm not sure yet. I need to thin"}
+]
+```
+
+> The `human` label is confirmed directly from the mapping function, since no
+> real text in this run scored at or below 0.35:
+> `python -c "import scoring; print([scoring.score_to_label(s)[0] for s in (0.0, 0.5, 1.0)])"`
+> → `['human', 'unsure', 'ai']`. That (not the eval texts) is what Criterion 3 targets.
+
+**Criterion 4 — a valid appeal moves the item to `under_review` and is logged (from `logs/audit.jsonl`) → PASS:**
+
+```json
+[
+  {"timestamp": "2026-11-02T03:15:24+00:00", "content_id": "f8ea81e6-4cbf-424b-9c2c-9ddd25b38edb", "creator_id": "test-user", "guess": "ai", "model_score": 0.7777, "style_score": 0.6641, "combined_score": 0.73794, "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.", "status": "decided"},
+  {"timestamp": "2026-11-02T03:15:30+00:00", "content_id": "f8ea81e6-4cbf-424b-9c2c-9ddd25b38edb", "creator_id": "test-user", "event": "appeal", "status": "under_review", "reasoning": "I wrote this myself and would like the result reviewed."}
+]
+```
+
+**Criterion 5 — bad input and length boundary (all three trials identical) → PASS:**
+
+```json
+[
+  {"status": 400, "guess": null, "confidence": null, "sent": "{\"creator_id\": \"eval_missing_text\"}"},
+  {"status": 400, "guess": null, "confidence": null, "sent": "(empty text)"},
+  {"status": 400, "guess": null, "confidence": null, "sent": "   "},
+  {"status": 200, "guess": "unsure", "confidence": 0.648915, "model_score": 0.9975, "style_score": 0.3343, "sent": "word word ... (exactly 10,000 characters)"},
+  {"status": 413, "guess": null, "confidence": null, "sent": "word word ... (10,001 characters)"}
+]
 ```
 
 **Diagnoses**
@@ -710,6 +800,42 @@ that produced it:
                         signal at 0.6, so it dragged the whole score down."
 
      Look for a pattern. Five failures on one signal is one problem, not five. -->
+
+There is one missed criterion (2) and two broken attacks (FP04, FP06). They are
+the same problem seen from two sides.
+
+**Criterion 2 — MISS. Stage: signal two (stylometry) and the combining rule.**
+The human mean (0.482) and AI mean (0.592) are only 0.11 apart; the target is
+0.20. The mechanism is that the **style signal does not discriminate**. Across
+every text in the eval — Darwin, the AI passage, my own samples — `style_score`
+sits in a narrow 0.55–0.71 band and never goes low: human Darwin windows scored
+style 0.55–0.71, the AI passage scored 0.63–0.68, essentially the same range.
+When one of the two signals carries no separation, the weighted average can only
+separate as far as the other does — and the model signal's human range (0.52–0.59)
+and AI range (0.58–0.73) overlap too. Averaging two weakly-separated signals
+compresses both groups toward the middle of the unsure band, so the means land
+0.11 apart instead of 0.20.
+
+**FP04 and FP06 — BROKE. Stage: signal one (model).** FP04 (student essay to a
+rubric): model 0.833, style 0.646 → 0.735 `ai`. FP06 (person imitating a formal
+template): model 0.881, style 0.582 → 0.659 `ai`. The mechanism is the mirror
+image: the **model signal over-fires on formal, structured human prose**. Writing
+to a rubric or a template is predictable by construction — short, even sentences,
+conventional transitions — which is exactly what low perplexity looks like, so
+the model reads "predictable" as "AI." It drives `model_score` past 0.83, and at
+weight 0.55 that alone carries the combined score over the 0.65 AI line while the
+other signals stay moderate.
+
+**The one pattern underneath both.** Nothing in the entire eval scored below 0.35
+— not one of ten everyday human samples, not a single Darwin window — and in the
+attack run no genuine-human text was ever labelled `human` either. The service
+has effectively lost its bottom band for real writing: the style floor never
+drops and the model fires on anything structured, so human text is pinned in
+`unsure` or pushed into `ai`. Criterion 1 passes only because the unsure band is
+wide enough to absorb that; Criterion 2 fails because the same compression leaves
+no separation left to measure. The fix has to lower the floor on human text —
+recalibrate the style signal so clean human prose scores low — which is the
+improvement attempted below.
 
 
 
