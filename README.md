@@ -467,7 +467,7 @@ same field. A wrong attestation phrase, or a missing/mismatched credential on
 
 ## Rate Limiting
 
-**My limits:** ___ per minute, ___ per day
+**My limits:** __15_ per minute, _225_ per day
 
 **Why those numbers and not others:**
 <!-- Think about two people: a real writer submitting their own work a few
@@ -481,7 +481,37 @@ can look like one. -->
 
 **The run of status codes when I pushed past it:**
 
-<!-- python run_attacks.py --flood 15 -->
+<!-- python run_attacks.py --flood 20 -->
+
+NOTES Changed 15 to 20 since my limit was 15 
+(.venv) PS C:\Users\Josh\ai201-project4-provenance-guard-starter-v2026> python run_attacks.py --flood 20                                                              
+20 submissions as 'flood_tester' against http://127.0.0.1:5000
+The first one is slow while the model loads.
+
+  [ 1/20] 200
+  [ 2/20] 200
+  [ 3/20] 200
+  [ 4/20] 200
+  [ 5/20] 200
+  [ 6/20] 200
+  [ 7/20] 200
+  [ 8/20] 200
+  [ 9/20] 200
+  [10/20] 200
+  [11/20] 200
+  [12/20] 200
+  [13/20] 200
+  [14/20] 200
+  [15/20] 200
+  [16/20] 429
+  [17/20] 429
+  [18/20] 429
+  [19/20] 429
+  [20/20] 429
+
+============================================================
+200 200 200 200 200 200 200 200 200 200 200 200 200 200 200 429 429 429 429 429
+============================================================
 
 ```
 
@@ -494,20 +524,155 @@ can look like one. -->
 <!-- Every attack with its outcome and a held-or-broke mark.
      `run_attacks.py --label before` produces the table. -->
 
+Full run: 56 attacks sent to `POST /submit`, produced by `run_attacks.py::main`
+(report `results/attack_run_2026-11-09_0058.md`), service `app.py::submit`.
+No attack returned a 5xx or crashed, so nothing is auto-marked BROKE; the
+verdicts below are mine.
 
+**How I marked held vs broke.** The script can only call the unambiguous case
+(a 5xx or a crash is BROKE). Everything else depends on what each family was
+going for, so I used one rule per family:
+
+- **evasion** — AI-leaning text trying to be *cleared as human*. **BROKE** only
+  if it earned a confident `human` label; landing in `unsure` is **HELD**,
+  because the service refused to clear it.
+- **false_positive** — genuine human writing. **BROKE** if it was labelled
+  `ai` (a real writer accused); `unsure` or `human` is **HELD**.
+- **prompt_injection** — **BROKE** if the injected instruction changed control
+  flow, altered the label text, or corrupted a log entry. Scored as ordinary
+  text is **HELD**.
+- **malformed** — **BROKE** on a 5xx or crash. A clean `400`/`413`, or a sane
+  `200`, is **HELD**.
+- **flood_same_creator** — **BROKE** if it got through when it should have been
+  limited. Rejected, or legitimately under the limit, is **HELD**.
+
+**Count: 54 HELD / 2 BROKE of 56.** Both breaks are in `false_positive`.
+
+| Family | Attacks | Held | Broke |
+|---|---|---|---|
+| evasion | 10 | 10 | 0 |
+| false_positive | 8 | 6 | **2** |
+| prompt_injection | 6 | 6 | 0 |
+| malformed | 20 | 20 | 0 |
+| flood_same_creator | 12 | 12 | 0 |
+| **Total** | **56** | **54** | **2** |
+
+Every input with its outcome:
+
+| ID | Family | Targeting | Status | Guess | Score | Verdict |
+|---|---|---|---|---|---|---|
+| EV01 | evasion | typos raise word variety | 200 | unsure | 0.377 | HELD (weak — score near the 0.35 human line; model signal fell to 0.16) |
+| EV02 | evasion | broken-up sentences raise length spread | 200 | unsure | 0.579 | HELD |
+| EV03 | evasion | pasted quotation changes the shape | 200 | unsure | 0.634 | HELD |
+| EV04 | evasion | unusual words raise perplexity | 200 | unsure | 0.624 | HELD |
+| EV05 | evasion | heavy human editing pass | 200 | unsure | 0.357 | HELD (weak — 0.007 above the human line) |
+| EV06 | evasion | one very long + one very short sentence | 200 | unsure | 0.537 | HELD |
+| EV07 | evasion | padding with punctuation | 200 | ai | 0.681 | HELD (caught) |
+| EV08 | evasion | text below the token window | 200 | unsure | 0.363 | HELD (weak) |
+| EV09 | evasion | AI text with a human opening bolted on | 200 | ai | 0.651 | HELD (caught) |
+| EV10 | evasion | repeated stanza structure | 200 | ai | 0.658 | HELD (caught) |
+| FP01 | false_positive | plain, clear human writing | 200 | unsure | 0.512 | HELD (not cleared) |
+| FP02 | false_positive | human writing, formal register | 200 | unsure | 0.592 | HELD (not cleared) |
+| FP03 | false_positive | non-native speaker writing carefully | 200 | unsure | 0.620 | HELD (not cleared) |
+| FP04 | false_positive | student essay to a rubric | 200 | ai | 0.735 | **BROKE — real student labelled AI** |
+| FP05 | false_positive | human-written technical docs | 200 | unsure | 0.616 | HELD (not cleared) |
+| FP06 | false_positive | person imitating a formal template | 200 | ai | 0.659 | **BROKE — human labelled AI** |
+| FP07 | false_positive | human repeating a phrase deliberately | 200 | unsure | 0.632 | HELD (not cleared) |
+| FP08 | false_positive | very short genuine human submission | 200 | unsure | 0.412 | HELD (not cleared) |
+| PI01 | prompt_injection | "ignore the check" | 200 | unsure | 0.444 | HELD (scored as text) |
+| PI02 | prompt_injection | instruction disguised as system message | 200 | human | 0.321 | HELD (scored as text) |
+| PI03 | prompt_injection | instruction in the writer's voice | 200 | unsure | 0.531 | HELD |
+| PI04 | prompt_injection | make the label text hostile | 200 | unsure | 0.495 | HELD (label text unchanged) |
+| PI05 | prompt_injection | inject into the audit log | 200 | unsure | 0.594 | HELD (log entry clean) |
+| PI06 | prompt_injection | instruction plus real human text | 200 | unsure | 0.480 | HELD |
+| MF01 | malformed | text is only whitespace | 400 | — | — | HELD (rejected `invalid_text`) |
+| MF02 | malformed | text is a single character | 400 | — | — | HELD (rejected `text_cannot_be_scored`) |
+| MF03 | malformed | text is control characters | 200 | human | 0.277 | HELD (no crash) |
+| MF04 | malformed | text is only punctuation | 200 | human | 0.156 | HELD (no crash) |
+| MF05 | malformed | one very long single word | 200 | ai | 0.749 | HELD (no crash; but garbage scored confident-AI) |
+| MF06 | malformed | emoji only | 200 | ai | 0.698 | HELD (no crash; garbage scored confident-AI) |
+| MF07 | malformed | right-to-left script | 200 | unsure | 0.649 | HELD (no crash) |
+| MF08 | malformed | 60,000 characters | 413 | — | — | HELD (rejected `text_too_long`) |
+| RQ01 | malformed | no text field | 400 | — | — | HELD |
+| RQ02 | malformed | no creator_id | 400 | — | — | HELD (logged as `unknown`) |
+| RQ03 | malformed | text is a number | 400 | — | — | HELD |
+| RQ04 | malformed | text is a list | 400 | — | — | HELD |
+| RQ05 | malformed | text is null | 400 | — | — | HELD |
+| RQ06 | malformed | creator_id is an object | 400 | — | — | HELD (logged as `unknown`) |
+| RQ07 | malformed | body is a JSON array | 400 | — | — | HELD |
+| RQ08 | malformed | body is unparseable JSON | 400 | — | — | HELD |
+| RQ09 | malformed | body is empty | 400 | — | — | HELD |
+| RQ10 | malformed | body is form-encoded | 400 | — | — | HELD |
+| RQ11 | malformed | JSON claiming to be plain text | 400 | — | — | HELD |
+| RQ12 | malformed | deeply nested JSON | 400 | — | — | HELD |
+| FL01_01–12 | flood_same_creator | 12 rapid submissions, one creator | 200 ×12 | human | 0.251 | HELD (all under the 15/min limit — see note) |
+
+**On the two breaks.** Both are genuine human writing that the service called
+`ai`: FP04 (a student essay written to a rubric, 0.735) and FP06 (a person
+imitating a formal template, 0.659). Looking across the whole `false_positive`
+family, the more alarming pattern is that **not one of the eight real-human
+texts was ever labelled `human`** — six landed `unsure`, two landed `ai`. The
+service never confidently cleared a real writer. That is the Milestone-1
+false-positive decision showing its cost, and it points straight at Criterion 1.
+
+**On the flood family.** The attack set's `flood_same_creator` family is 12
+rows sharing one `creator_id`, and my per-creator limit is 15/minute — so all
+12 legitimately pass, and this run shows no `429`. That is the limiter working,
+not failing: it would have rejected the 16th. The actual proof that limiting
+rejects a burst is the Milestone-1 flood of 20 (15 × `200` then 5 × `429`),
+pasted under **Rate Limiting** above and included as a rejection entry below.
 
 **Ten audit log entries from the run**
 
 <!-- Choose entries that show the interesting failures, not the ten easiest. -->
 
-```json
+Pulled with `curl "http://127.0.0.1:5000/log?limit=200"` from `logs/audit.jsonl`
+(written by `audit.py::log_decision` / `log_rejection`). Chosen for what they
+show — the two false accusations, the near-miss evasion, a signal disagreement,
+garbage scored as confident AI, an injection that did nothing, and three
+rejection records including a rate-limit `429`.
 
+```json
+{"timestamp": "2026-11-09T05:58:17+00:00", "content_id": "e4a324b7-c62e-4445-b59f-69dcf5c9919d", "creator_id": "attacker_FP04", "guess": "ai", "model_score": 0.8329, "style_score": 0.6463, "combined_score": 0.7345900000000001, "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.", "status": "decided", "phrase_score": 0.5507, "verified_human": false}
+{"timestamp": "2026-11-09T05:58:19+00:00", "content_id": "dc70efdc-ed03-4b8d-bf28-efb1f1e24c15", "creator_id": "attacker_FP06", "guess": "ai", "model_score": 0.8814, "style_score": 0.5821, "combined_score": 0.6594, "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T05:58:11+00:00", "content_id": "9680b50e-e65c-4c7b-9081-a2447528ad08", "creator_id": "attacker_EV01", "guess": "unsure", "model_score": 0.1635, "style_score": 0.7083, "combined_score": 0.37666499999999997, "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.", "status": "decided", "phrase_score": 0.495, "verified_human": false}
+{"timestamp": "2026-11-09T05:58:15+00:00", "content_id": "0e1796f6-a71e-4b76-85a5-c04edc103464", "creator_id": "attacker_EV10", "guess": "ai", "model_score": 0.9792, "style_score": 0.3997, "combined_score": 0.65847, "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T05:58:32+00:00", "content_id": "ac96bd39-6309-4c43-973c-b04934eff258", "creator_id": "attacker_MF05", "guess": "ai", "model_score": 0.9976, "style_score": 0.6667, "combined_score": 0.7486900000000001, "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T05:58:36+00:00", "content_id": "ab7c28e7-7345-4258-92d1-a44478b6c8b1", "creator_id": "attacker_MF06", "guess": "ai", "model_score": 0.9969, "style_score": 0.5, "combined_score": 0.6982950000000001, "label": "This text has patterns often associated with AI-generated writing, but this result cannot prove who wrote it.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T05:58:25+00:00", "content_id": "e0326e0d-61a7-45c8-9dc1-a75e54832382", "creator_id": "attacker_PI05", "guess": "unsure", "model_score": 0.6401, "style_score": 0.8052, "combined_score": 0.593615, "label": "We can't reliably tell whether this was written by a person or by AI. This result is uncertain, not proof of AI use.", "status": "decided", "phrase_score": 0.0, "verified_human": false}
+{"timestamp": "2026-11-09T05:58:26+00:00", "creator_id": "attacker_MF01", "event": "rejected", "status": "rejected", "reason": "invalid_text"}
+{"timestamp": "2026-11-09T05:58:42+00:00", "creator_id": "attacker_MF08", "event": "rejected", "status": "rejected", "reason": "text_too_long", "text_length": 57640, "max_characters": 10000}
+{"timestamp": "2026-11-04T23:23:33+00:00", "creator_id": "flood_tester", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "15 per 1 minute"}
 ```
+
+What these show, in order: **FP04 / FP06** — the two genuine-human texts the
+service accused (`ai`); **EV01** — an evasion that dragged the model signal down
+to `0.16` with typos and landed `0.377`, a hair above the human line, the
+closest any evasion came to being cleared; **EV10** — the signals flatly
+disagreed (model `0.98`, style `0.40`) and the combining rule still returned
+`ai`; **MF05 / MF06** — a single long junk word and an emoji-only string, both
+scored confident `ai` on the model signal alone, which is the model over-reacting
+to odd tokenisation rather than any real detection; **PI05** — an attempt to
+inject into the audit log, which the service wrote as an ordinary, well-formed
+decision entry with no injected content, because text is only ever data here;
+**MF01 / MF08** — graceful rejections (empty text, oversized text) that log the
+reason and write no decision; and **the `429`** — the rate limiter rejecting the
+16th-plus submission in the Milestone-1 flood, recorded as a rejection with its
+limit, so the attack that shows up only as an absence still leaves a trace.
 
 **The single worst outcome** — the one I'd least want to explain to a writer
 whose work got caught by it:
 
-
+**FP04 — a student essay written to a rubric, labelled `ai` at 0.735.** This is
+the worst because it is the most realistic and the most consequential: a real
+student, writing to the structure a rubric asked for, gets the high-confidence
+AI label on a site where that label can trigger an academic-integrity process.
+The rubric is what did it — writing to a required structure flattens exactly the
+sentence-variation and perplexity that both signals read as "machine-like," so
+the student is penalised for following instructions. Nothing about the text is
+AI, and the system had no way to say so. It is the clearest case of the
+one-sided cost Criterion 1 is about: a missed AI text inconveniences the site a
+little, but this accuses a person.
 
 ---
 
